@@ -80,13 +80,13 @@ function appendAuditEntry(
 }
 
 // Initial Genesis Entry
-appendAuditEntry('GENESIS_INITIALIZED', 'system', 'root-0', 'admin', 'sys-0', 'SafeWay audit ledger initialized for Manali pilot deployment');
+appendAuditEntry('GENESIS_INITIALIZED', 'system', 'root-0', 'admin', 'sys-0', 'Safe Yatra audit ledger initialized for Manali pilot deployment');
 
 // User Profile (Tourist Mayank Kumar)
 let userProfile = {
   id: 'usr_manali_01',
   full_name: 'Mayank Kumar',
-  email: 'mayank.tourist@safeway.gov.in',
+  email: 'mayank.tourist@safeyatra.gov.in',
   phone: '+91 98765 43210',
   role: 'tourist' as const,
   public_id: 'TID-2026-MNL-7842',
@@ -338,7 +338,7 @@ let incidents: any[] = [
         event_type: 'submitted',
         from_status: undefined,
         to_status: 'submitted',
-        notes: 'SOS triggered via SafeWay App. GPS fix verified (15m accuracy).',
+        notes: 'SOS triggered via Safe Yatra App. GPS fix verified (15m accuracy).',
         created_at: new Date(Date.now() - 3600000 * 2).toISOString()
       },
       {
@@ -403,7 +403,7 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    service: 'safeway-api',
+    service: 'safe-yatra-api',
     version: '1.0.0-pilot-manali'
   });
 });
@@ -484,7 +484,7 @@ app.get('/api/v1/id/:publicId/verify', (req: Request, res: Response) => {
   return res.json({
     valid: true,
     public_id: publicId,
-    tourist_name: 'Verified SafeWay Traveler',
+    tourist_name: 'Verified Safe Yatra Traveler',
     blood_group: 'B+',
     identity_status: 'verified',
     active_trip: 'Manali Circuit',
@@ -582,7 +582,7 @@ app.post('/api/v1/routes/rank', (req: Request, res: Response) => {
   const routes = [
     {
       id: 'route-safest',
-      name: 'Route 1: SafeWay Recommended (Shanag Bypass)',
+      name: 'Route 1: Safe Yatra Recommended (Shanag Bypass)',
       via: 'Via Shanag Link Road & Vashisht Bypass',
       distance_km: 15.8,
       duration_mins: 42,
@@ -687,7 +687,7 @@ app.post('/api/v1/price/check', (req: Request, res: Response) => {
     message,
     difference_percent,
     tourist_advice: status === 'overpriced'
-      ? 'Politely decline and book via the official Taxi Union Counter on Mall Road or choose an authorized SafeWay verified provider.'
+      ? 'Politely decline and book via the official Taxi Union Counter on Mall Road or choose an authorized Safe Yatra verified provider.'
       : 'Price matches local standards. Confirm all inclusions (tolls, parking, waiting time) before departing.'
   });
 });
@@ -821,7 +821,7 @@ app.post('/api/v1/sos', (req: Request, res: Response) => {
     longitude: Number(longitude) || 77.1892,
     accuracy_meters: Number(accuracy_meters) || 10,
     battery_level: battery_level || 85,
-    description: description || 'Emergency SOS triggered from SafeWay tourist application.',
+    description: description || 'Emergency SOS triggered from Safe Yatra tourist application.',
     created_at: now,
     updated_at: now,
     events: [
@@ -849,7 +849,7 @@ app.post('/api/v1/sos', (req: Request, res: Response) => {
       id: smsId,
       recipient_phone: contact.phone,
       recipient_name: contact.name,
-      body: `ALERT: SafeWay SOS from ${userProfile.full_name}! Location: ${newIncident.latitude.toFixed(4)}, ${newIncident.longitude.toFixed(4)} (accuracy ~${newIncident.accuracy_meters}m). Tourist ID: ${userProfile.public_id}. Emergency services notified.`,
+      body: `ALERT: Safe Yatra SOS from ${userProfile.full_name}! Location: ${newIncident.latitude.toFixed(4)}, ${newIncident.longitude.toFixed(4)} (accuracy ~${newIncident.accuracy_meters}m). Tourist ID: ${userProfile.public_id}. Emergency services notified.`,
       subject_type: 'sos_alert',
       created_at: now,
       status: 'delivered'
@@ -870,7 +870,7 @@ app.post('/api/v1/sos', (req: Request, res: Response) => {
   res.status(201).json({
     duplicate: false,
     incident: newIncident,
-    message: 'Report sent to SafeWay response team. Emergency contacts notified via SMS.'
+    message: 'Report sent to Safe Yatra response team. Emergency contacts notified via SMS.'
   });
 });
 
@@ -1005,7 +1005,7 @@ app.post('/api/v1/checkins', (req: Request, res: Response) => {
       id: `sms-checkin-${Date.now()}-${idx}`,
       recipient_phone: contact.phone,
       recipient_name: contact.name,
-      body: `SafeWay Check-in: ${userProfile.full_name} checked in as SAFE at ${location_name} (${Number(latitude).toFixed(4)}, ${Number(longitude).toFixed(4)}). All clear.`,
+      body: `Safe Yatra Check-in: ${userProfile.full_name} checked in as SAFE at ${location_name} (${Number(latitude).toFixed(4)}, ${Number(longitude).toFixed(4)}). All clear.`,
       subject_type: 'checkin',
       created_at: now,
       status: 'delivered'
@@ -1121,11 +1121,11 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[SafeWay] Server running at http://0.0.0.0:${PORT} (Node.js ${process.version})`);
+    console.log(`[Safe Yatra] Server running at http://0.0.0.0:${PORT} (Node.js ${process.version})`);
   });
 }
 
 startServer().catch(err => {
-  console.error('[SafeWay] Startup failed:', err);
+  console.error('[Safe Yatra] Startup failed:', err);
   process.exit(1);
 });

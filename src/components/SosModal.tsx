@@ -85,7 +85,7 @@ export const SosModal: React.FC<SosModalProps> = ({
         latitude: currentLocation[0],
         longitude: currentLocation[1],
         accuracy_meters: 15,
-        description: notes || 'Immediate emergency assistance requested via SafeWay 1-Tap SOS.',
+        description: notes || 'Immediate emergency assistance requested via Safe Yatra 1-Tap SOS.',
         battery_level: 74,
       });
 
@@ -111,7 +111,7 @@ export const SosModal: React.FC<SosModalProps> = ({
   const contacts = userProfile.emergency_contacts || [];
   const contactsPhones = contacts.map(c => c.phone.replace(/[^0-9+]/g, '')).join(',');
   const smsBody = encodeURIComponent(
-    `SOS EMERGENCY from ${userProfile.full_name}! Location: ${currentLocation[0].toFixed(4)}, ${currentLocation[1].toFixed(4)} (accuracy ~15m) near Manali. Tourist ID: ${userProfile.public_id}. Please help or alert local rescue. Sent via SafeWay.`
+    `SOS EMERGENCY from ${userProfile.full_name}! Location: ${currentLocation[0].toFixed(4)}, ${currentLocation[1].toFixed(4)} (accuracy ~15m) near Manali. Tourist ID: ${userProfile.public_id}. Please help or alert local rescue. Sent via Safe Yatra.`
   );
   const smsHref = `sms:${contactsPhones}?body=${smsBody}`;
 
@@ -129,7 +129,7 @@ export const SosModal: React.FC<SosModalProps> = ({
             </div>
             <div>
               <h2 className="font-extrabold text-lg text-white tracking-wide">
-                SafeWay SOS Response Center
+                Safe Yatra SOS Response Center
               </h2>
               <p className="text-xs text-rose-200">
                 Manali District Emergency Operation Center (DEOC)

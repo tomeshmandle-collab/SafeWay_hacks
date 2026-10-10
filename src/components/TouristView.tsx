@@ -178,7 +178,7 @@ export const TouristView: React.FC<TouristViewProps> = ({
               Welcome to Manali, {userProfile.full_name}
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-              SafeWay is actively monitoring your corridor. Check safe routes avoiding active landslide sectors, compare taxi and adventure quotes against official government baselines, and access instant SOS support.
+              Safe Yatra is actively monitoring your corridor. Check safe routes avoiding active landslide sectors, compare taxi and adventure quotes against official government baselines, and access instant SOS support.
             </p>
           </div>
 
@@ -323,7 +323,7 @@ export const TouristView: React.FC<TouristViewProps> = ({
                           : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                       }`}
                     >
-                      {isSafe ? 'SafeWay Recommended' : 'Higher Risk Alternate'}
+                      {isSafe ? 'Safe Yatra Recommended' : 'Higher Risk Alternate'}
                     </span>
                     <h3 className="text-base font-bold text-white mt-1.5">
                       {r.name}
