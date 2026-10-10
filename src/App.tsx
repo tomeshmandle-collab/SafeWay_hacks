@@ -1,243 +1,189 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  UserRole, 
-  TouristProfile, 
-  Trip, 
-  HazardZone, 
-  RouteOption, 
-  PriceBaseline, 
-  ServiceProvider, 
-  Incident, 
-  CommunityReport, 
-  MockSMS, 
-  AuditBlock 
-} from './types';
-import { AppState } from './utils/storage';
-import { Navbar } from './components/Navbar';
+import { UserRole, UserProfile, HazardZone, TourismService, CommunityReport, Incident } from './types';
+import { api, setNetworkSimulator, getNetworkSimulator } from './lib/api';
+import { Header } from './components/Header';
 import { TouristView } from './components/TouristView';
-import { RescueAdminView } from './components/RescueAdminView';
-import { AuditLedgerView } from './components/AuditLedgerView';
-import { SOSModal } from './components/SOSModal';
-import { PublicIdVerifyModal } from './components/PublicIdVerifyModal';
-import { CinematicHero } from './components/CinematicHero';
-import { UidaiVerificationModal } from './components/UidaiVerificationModal';
+import { RescueView } from './components/RescueView';
+import { AdminView } from './components/AdminView';
+import { SosModal } from './components/SosModal';
+import { DigitalIdModal } from './components/DigitalIdModal';
+import { ReportModal } from './components/ReportModal';
 
 export const App: React.FC = () => {
-  // App Core State
   const [currentRole, setCurrentRole] = useState<UserRole>('tourist');
-  const [activeView, setActiveView] = useState<'tourist' | 'rescue_admin' | 'audit_ledger'>('tourist');
-  const [isSimulatedOffline, setIsSimulatedOffline] = useState<boolean>(false);
-  const [isSOSModalOpen, setIsSOSModalOpen] = useState<boolean>(false);
-  const [isPublicIdModalOpen, setIsPublicIdModalOpen] = useState<boolean>(false);
-  const [isUidaiModalOpen, setIsUidaiModalOpen] = useState<boolean>(false);
+  const [networkMode, setNetworkMode] = useState<'online' | 'weak' | 'offline'>('online');
+  const [currentLocation, setCurrentLocation] = useState<[number, number]>([32.2432, 77.1892]);
 
-  // Domain Entities
-  const [tourist, setTourist] = useState<TouristProfile>(AppState.getTourist());
-  const [trip, setTrip] = useState<Trip | null>(AppState.getTrip());
-  const [hazards, setHazards] = useState<HazardZone[]>(AppState.getHazards());
-  const [routes] = useState<RouteOption[]>(AppState.getRoutes());
-  const [priceBaselines] = useState<PriceBaseline[]>(AppState.getPriceBaselines());
-  const [services, setServices] = useState<ServiceProvider[]>(AppState.getServices());
-  const [incidents, setIncidents] = useState<Incident[]>(AppState.getIncidents());
-  const [reports, setReports] = useState<CommunityReport[]>(AppState.getReports());
-  const [smsOutbox, setSmsOutbox] = useState<MockSMS[]>(AppState.getSMSOutbox());
-  const [auditLedger, setAuditLedger] = useState<AuditBlock[]>([]);
-  const [offlineQueue, setOfflineQueue] = useState<Incident[]>(AppState.getOfflineQueue());
+  // Data state
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [hazardZones, setHazardZones] = useState<HazardZone[]>([]);
+  const [services, setServices] = useState<TourismService[]>([]);
+  const [reports, setReports] = useState<CommunityReport[]>([]);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Load audit ledger asynchronously
+  // Modals
+  const [isSosOpen, setIsSosOpen] = useState(false);
+  const [isDigitalIdOpen, setIsDigitalIdOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
+
   useEffect(() => {
-    AppState.getAuditLedger().then((ledger) => {
-      setAuditLedger(ledger);
-    });
-  }, []);
+    loadAllData();
 
-  // Sync offline queue when coming back online or manual sync trigger
-  const handleSyncQueue = async () => {
-    const queue = AppState.getOfflineQueue();
-    if (queue.length === 0) return;
-
-    const currentInc = AppState.getIncidents();
-    const updatedInc = [...queue.map((item) => ({ ...item, is_offline_queued: false, ui_status: 'submitted' as const })), ...currentInc];
-    
-    // Update state
-    setIncidents(updatedInc);
-    AppState.saveIncidents(updatedInc);
-
-    // Record mock SMS and audit entries for each synced incident
-    for (const item of queue) {
-      tourist.contacts.forEach((contact) => {
-        AppState.recordMockSMS(
-          contact.phone,
-          contact.name,
-          `EMERGENCY ALERT (Synced from offline queue): Tourist ${item.tourist_name} (${item.tourist_public_id}) activated SOS [${item.category.toUpperCase()}]. Location: ${item.lat.toFixed(4)}, ${item.lng.toFixed(4)}. Response unit alerted.`,
-          'sos_alert'
-        );
-      });
-
-      await AppState.appendAuditEntry(
-        'SOS_SYNCED_FROM_OFFLINE_QUEUE',
-        item.tourist_name,
-        'tourist',
-        `Synced incident ${item.id} from device offline queue. Category=${item.category}`
+    // Check browser geolocation if available
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          // Keep Manali coordinates if user is elsewhere, but note precision
+          // Only override if within Manali bounds (lat ~32, lng ~77)
+          if (Math.abs(pos.coords.latitude - 32.2) < 2.0 && Math.abs(pos.coords.longitude - 77.1) < 2.0) {
+            setCurrentLocation([pos.coords.latitude, pos.coords.longitude]);
+          }
+        },
+        () => {
+          // Default to Manali center
+        },
+        { enableHighAccuracy: true, timeout: 5000 }
       );
     }
+  }, []);
 
-    // Clear offline queue
-    AppState.saveOfflineQueue([]);
-    setOfflineQueue([]);
-    setSmsOutbox(AppState.getSMSOutbox());
-    const freshLedger = await AppState.getAuditLedger();
-    setAuditLedger(freshLedger);
-  };
-
-  const handleToggleOffline = () => {
-    const next = !isSimulatedOffline;
-    setIsSimulatedOffline(next);
-    if (!next && offlineQueue.length > 0) {
-      handleSyncQueue();
+  const loadAllData = async () => {
+    try {
+      const [me, z, s, r, inc] = await Promise.all([
+        api.getMe(),
+        api.getZones(),
+        api.getServices(),
+        api.getReports(),
+        api.getIncidents('rescue'),
+      ]);
+      setUserProfile(me);
+      setHazardZones(z);
+      setServices(s);
+      setReports(r);
+      setIncidents(inc);
+    } catch (e) {
+      console.error('Failed to load initial data:', e);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleRefreshSMS = () => {
-    setSmsOutbox(AppState.getSMSOutbox());
+  const handleNetworkChange = (mode: 'online' | 'weak' | 'offline') => {
+    setNetworkMode(mode);
+    setNetworkSimulator(mode);
   };
 
-  const handleRefreshLedger = async () => {
-    const fresh = await AppState.getAuditLedger();
-    setAuditLedger(fresh);
-  };
-
-  const handleIncidentCreated = async (newIncident: Incident) => {
-    if (isSimulatedOffline) {
-      setOfflineQueue(AppState.getOfflineQueue());
-    } else {
-      setIncidents(AppState.getIncidents());
-      setSmsOutbox(AppState.getSMSOutbox());
-      const fresh = await AppState.getAuditLedger();
-      setAuditLedger(fresh);
-    }
-  };
-
-  // Automatically switch activeView when role changes if appropriate
   const handleRoleChange = (role: UserRole) => {
     setCurrentRole(role);
-    if (role === 'rescue' || role === 'admin') {
-      setActiveView('rescue_admin');
-    } else if (role === 'tourist') {
-      setActiveView('tourist');
-    }
   };
+
+  const activeSosCount = incidents.filter(i => i.status !== 'resolved' && i.status !== 'cancelled').length;
+
+  if (isLoading || !userProfile) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-100 gap-4">
+        <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+        <div className="text-center">
+          <h2 className="text-xl font-bold tracking-tight text-white">SafeWay Emergency System</h2>
+          <p className="text-xs text-slate-400 mt-1">Initializing Manali Pilot Infrastructure...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      {/* Top Navbar */}
-      <Navbar
+      
+      {/* Top Navigation Bar */}
+      <Header
         currentRole={currentRole}
         onRoleChange={handleRoleChange}
-        isSimulatedOffline={isSimulatedOffline}
-        onToggleOffline={handleToggleOffline}
-        queuedItemsCount={offlineQueue.length}
-        onSyncQueue={handleSyncQueue}
-        onTriggerSOS={() => setIsSOSModalOpen(true)}
-        activeView={activeView}
-        onViewChange={(v) => setActiveView(v)}
-        onOpenUidaiModal={() => setIsUidaiModalOpen(true)}
+        networkMode={networkMode}
+        onNetworkModeChange={handleNetworkChange}
+        onOpenSos={() => setIsSosOpen(true)}
+        onOpenDigitalId={() => setIsDigitalIdOpen(true)}
+        activeSosCount={activeSosCount}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
-        {activeView === 'tourist' && (
-          <>
-            <CinematicHero
-              tourist={tourist}
-              onExploreRoutes={() => {
-                setActiveView('tourist');
-              }}
-              onOpenUidaiModal={() => setIsUidaiModalOpen(true)}
-              onTriggerSOS={() => setIsSOSModalOpen(true)}
-            />
-            <TouristView
-              tourist={tourist}
-              trip={trip}
-              hazards={hazards}
-              routes={routes}
-              priceBaselines={priceBaselines}
-              services={services}
-              onUpdateTourist={(updated) => setTourist(updated)}
-              onUpdateTrip={(updated) => setTrip(updated)}
-              onOpenPublicIdModal={() => setIsPublicIdModalOpen(true)}
-              onOpenUidaiModal={() => setIsUidaiModalOpen(true)}
-              onTriggerSOS={() => setIsSOSModalOpen(true)}
-            />
-          </>
-        )}
-
-        {activeView === 'rescue_admin' && (
-          <RescueAdminView
-            currentRole={currentRole}
-            incidents={incidents}
-            hazards={hazards}
+      {/* Main Container */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {currentRole === 'tourist' && (
+          <TouristView
+            userProfile={userProfile}
+            currentLocation={currentLocation}
+            hazardZones={hazardZones}
             services={services}
             reports={reports}
-            smsOutbox={smsOutbox}
-            onUpdateIncidents={(updated) => setIncidents(updated)}
-            onUpdateHazards={(updated) => setHazards(updated)}
-            onUpdateServices={(updated) => setServices(updated)}
-            onUpdateReports={(updated) => setReports(updated)}
-            onRefreshSMS={handleRefreshSMS}
+            incidents={incidents}
+            onOpenSos={() => setIsSosOpen(true)}
+            onOpenReportModal={() => setIsReportOpen(true)}
+            onCheckinSuccess={loadAllData}
           />
         )}
 
-        {activeView === 'audit_ledger' && (
-          <AuditLedgerView
-            ledger={auditLedger}
-            onRefreshLedger={handleRefreshLedger}
+        {currentRole === 'rescue' && (
+          <RescueView
+            incidents={incidents}
+            hazardZones={hazardZones}
+            onIncidentUpdated={loadAllData}
+          />
+        )}
+
+        {currentRole === 'admin' && (
+          <AdminView
+            hazardZones={hazardZones}
+            services={services}
+            reports={reports}
+            onDataChanged={loadAllData}
           />
         )}
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950 py-6 px-4 text-center text-xs text-slate-500">
-        <div className="max-w-7xl mx-auto space-y-1">
-          <p>
-            SafeWay · Prototype Tourist Safety & Emergency Coordination System for Manali, Himachal Pradesh.
-          </p>
-          <p className="text-[11px] text-slate-600">
-            Seeded zones, rate cards, and mock SMS alerts are labelled sample data. Aligned with Indian emergency dispatch standards (112, 100, 108).
-          </p>
+      <footer className="border-t border-slate-900 bg-slate-950/80 py-6 text-xs text-slate-400">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2">
+            <span className="font-extrabold text-amber-400">SafeWay</span>
+            <span>• Pilot: Manali, Himachal Pradesh, India</span>
+          </div>
+          <div className="flex items-center gap-4 text-[11px] text-slate-400">
+            <span>Build With Bharat 4.0</span>
+            <span>•</span>
+            <span>Team Minions: Mayank, Tomesh, Shivika, Yukta</span>
+          </div>
         </div>
       </footer>
 
-      {/* SOS Modal Dialog */}
-      <SOSModal
-        isOpen={isSOSModalOpen}
-        onClose={() => setIsSOSModalOpen(false)}
-        tourist={tourist}
-        currentLat={trip?.current_lat || 32.2396}
-        currentLng={trip?.current_lng || 77.1887}
-        accuracyM={trip?.accuracy_m || 14}
-        isSimulatedOffline={isSimulatedOffline}
-        onIncidentCreated={handleIncidentCreated}
-      />
-
-      {/* Public ID Verification Modal Dialog */}
-      <PublicIdVerifyModal
-        isOpen={isPublicIdModalOpen}
-        onClose={() => setIsPublicIdModalOpen(false)}
-        tourist={tourist}
-        trip={trip}
-      />
-
-      {/* UIDAI Sandbox Authentication Modal Dialog */}
-      <UidaiVerificationModal
-        isOpen={isUidaiModalOpen}
-        onClose={() => setIsUidaiModalOpen(false)}
-        tourist={tourist}
-        onVerificationComplete={(updated) => {
-          setTourist(updated);
-          AppState.getAuditLedger().then(setAuditLedger);
+      {/* Emergency Modals */}
+      <SosModal
+        isOpen={isSosOpen}
+        onClose={() => setIsSosOpen(false)}
+        userProfile={userProfile}
+        currentLocation={currentLocation}
+        onIncidentCreated={inc => {
+          setIncidents([inc, ...incidents]);
+          loadAllData();
         }}
       />
+
+      <DigitalIdModal
+        isOpen={isDigitalIdOpen}
+        onClose={() => setIsDigitalIdOpen(false)}
+        userProfile={userProfile}
+        onProfileUpdated={setUserProfile}
+      />
+
+      <ReportModal
+        isOpen={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+        currentLocation={currentLocation}
+        onReportSubmitted={rep => {
+          setReports([rep, ...reports]);
+          loadAllData();
+        }}
+      />
+
     </div>
   );
 };

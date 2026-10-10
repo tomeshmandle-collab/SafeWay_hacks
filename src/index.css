@@ -1,27 +1,15 @@
 @import "tailwindcss";
 
 @layer base {
-  * {
-    box-sizing: border-box;
-  }
   body {
-    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   }
 }
 
-.font-display {
-  font-family: "Instrument Serif", Georgia, serif;
-}
-
-/* Custom leaflet map fixes */
+/* Custom leaflet map adjustments */
 .leaflet-container {
   width: 100%;
   height: 100%;
+  border-radius: 0.75rem;
   z-index: 10;
-  font-family: inherit;
-  background-color: #0f172a;
-}
-
-.leaflet-tile {
-  filter: brightness(0.9) contrast(1.05);
 }
