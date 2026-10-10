@@ -1,0 +1,8 @@
+{
+  "name": "SafeWay - Tourist Safety & Emergency Assistance",
+  "description": "AI-assisted tourist safety and emergency coordination platform with hazard-aware routing, price checks, one-tap SOS with offline fallback, and tamper-evident audit ledger.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
