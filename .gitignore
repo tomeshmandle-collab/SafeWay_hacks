@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# Build outputs and generated files
+dist/
+dist-ssr/
+*.local
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Vercel deployment cache and metadata
+.vercel/
+
+# Testing and coverage
+coverage/
+*.lcov
+.nyc_output/
+
+# Logs and runtime diagnostics
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor and IDE configurations
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS-generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+
+# TypeScript cache
+*.tsbuildinfo

@@ -1,10 +1,10 @@
 import React from 'react';
 import { Shield, Radio, Wifi, WifiOff, AlertTriangle, QrCode, User, LifeBuoy } from 'lucide-react';
 import { UserRole } from '../types';
+import { supabase } from '../lib/supabase';
 
 interface HeaderProps {
   currentRole: UserRole;
-  onRoleChange: (role: UserRole) => void;
   networkMode: 'online' | 'weak' | 'offline';
   onNetworkModeChange: (mode: 'online' | 'weak' | 'offline') => void;
   onOpenSos: () => void;
@@ -14,7 +14,6 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   currentRole,
-  onRoleChange,
   networkMode,
   onNetworkModeChange,
   onOpenSos,
@@ -48,47 +47,30 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
           </div>
 
-          {/* Center Actions: Role Switcher */}
+          {/* Center Actions: Role Display & Logout */}
           <div className="flex items-center gap-1 sm:gap-2 bg-slate-800/80 p-1 rounded-xl border border-slate-700">
-            <button
-              onClick={() => onRoleChange('tourist')}
-              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                currentRole === 'tourist'
-                  ? 'bg-amber-500 text-slate-950 shadow-md font-bold'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <User className="w-3.5 h-3.5" />
-              <span>Tourist</span>
-            </button>
-
-            <button
-              onClick={() => onRoleChange('rescue')}
-              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all relative ${
-                currentRole === 'rescue'
-                  ? 'bg-rose-600 text-white shadow-md font-bold'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <LifeBuoy className="w-3.5 h-3.5" />
-              <span>Rescue</span>
-              {activeSosCount > 0 && (
-                <span className="w-4 h-4 rounded-full bg-amber-400 text-slate-900 text-[10px] font-black flex items-center justify-center animate-pulse">
+            <div className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 ${
+              currentRole === 'admin' ? 'text-indigo-400' :
+              currentRole === 'rescue' ? 'text-rose-400' : 'text-amber-400'
+            }`}>
+              {currentRole === 'admin' && <Radio className="w-3.5 h-3.5" />}
+              {currentRole === 'rescue' && <LifeBuoy className="w-3.5 h-3.5" />}
+              {currentRole === 'tourist' && <User className="w-3.5 h-3.5" />}
+              <span className="capitalize">{currentRole} Mode</span>
+              {currentRole === 'rescue' && activeSosCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-amber-400 text-slate-900 text-[10px] font-black flex items-center justify-center animate-pulse ml-1">
                   {activeSosCount}
                 </span>
               )}
-            </button>
+            </div>
+
+            <div className="w-px h-4 bg-slate-700 mx-1"></div>
 
             <button
-              onClick={() => onRoleChange('admin')}
-              className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                currentRole === 'admin'
-                  ? 'bg-indigo-600 text-white shadow-md font-bold'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
+              onClick={() => supabase.auth.signOut()}
+              className="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:text-white transition-colors"
             >
-              <Radio className="w-3.5 h-3.5" />
-              <span>Admin / Audit</span>
+              Sign Out
             </button>
           </div>
 

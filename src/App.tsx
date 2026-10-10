@@ -8,8 +8,13 @@ import { AdminView } from './components/AdminView';
 import { SosModal } from './components/SosModal';
 import { DigitalIdModal } from './components/DigitalIdModal';
 import { ReportModal } from './components/ReportModal';
+import { supabase } from './lib/supabase';
+import { AuthView } from './components/AuthView';
+import { Session } from '@supabase/supabase-js';
 
 export const App: React.FC = () => {
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [currentRole, setCurrentRole] = useState<UserRole>('tourist');
   const [networkMode, setNetworkMode] = useState<'online' | 'weak' | 'offline'>('online');
   const [currentLocation, setCurrentLocation] = useState<[number, number]>([32.2432, 77.1892]);
@@ -28,6 +33,42 @@ export const App: React.FC = () => {
   const [isReportOpen, setIsReportOpen] = useState(false);
 
   useEffect(() => {
+    // Supabase Auth Listener
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        setSession(session);
+        if (session?.user?.user_metadata?.role) {
+          setCurrentRole(session.user.user_metadata.role as UserRole);
+        }
+        setAuthLoading(false);
+      })
+      .catch(err => {
+        console.error('Failed to get Supabase session:', err);
+        setAuthLoading(false);
+      });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session?.user?.user_metadata?.role) {
+        setCurrentRole(session.user.user_metadata.role as UserRole);
+      } else {
+        setCurrentRole('tourist');
+      }
+      setAuthLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!session) {
+      setUserProfile(null);
+      setIsLoading(true);
+      return;
+    }
     loadAllData();
 
     // Check browser geolocation if available
@@ -46,7 +87,7 @@ export const App: React.FC = () => {
         { enableHighAccuracy: true, timeout: 5000 }
       );
     }
-  }, []);
+  }, [session]);
 
   const loadAllData = async () => {
     try {
@@ -74,11 +115,23 @@ export const App: React.FC = () => {
     setNetworkSimulator(mode);
   };
 
-  const handleRoleChange = (role: UserRole) => {
-    setCurrentRole(role);
-  };
-
   const activeSosCount = incidents.filter(i => i.status !== 'resolved' && i.status !== 'cancelled').length;
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-100 gap-4">
+        <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+        <div className="text-center">
+          <h2 className="text-xl font-bold tracking-tight text-white">Safe Yatra Auth</h2>
+          <p className="text-xs text-slate-400 mt-1">Verifying secure session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <AuthView />;
+  }
 
   if (isLoading || !userProfile) {
     return (
@@ -98,7 +151,6 @@ export const App: React.FC = () => {
       {/* Top Navigation Bar */}
       <Header
         currentRole={currentRole}
-        onRoleChange={handleRoleChange}
         networkMode={networkMode}
         onNetworkModeChange={handleNetworkChange}
         onOpenSos={() => setIsSosOpen(true)}
