@@ -630,7 +630,7 @@ background tracking, or the numeric safety score from those drafts.
 
 -   Mayank
 -   Tomesh
--   Shivika
+-   Yatharth
 -   Yukta
 
 Built for **Build With Bharat 4.0**, with the project piloted around

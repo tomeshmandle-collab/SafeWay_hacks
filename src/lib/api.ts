@@ -10,6 +10,7 @@ import {
   RouteOption,
   UserRole
 } from '../types';
+import { supabase } from './supabase';
 
 export const API_BASE = '';
 
@@ -34,12 +35,19 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     await new Promise(r => setTimeout(r, 1800));
   }
 
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string> || {}),
+  };
+
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`;
+  }
+
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    headers,
   });
 
   if (!response.ok) {

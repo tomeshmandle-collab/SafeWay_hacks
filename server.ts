@@ -13,6 +13,51 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 app.use(cors());
 app.use(express.json());
 
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase for token verification
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
+const supabaseAnonKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+
+if (!supabaseUrl) {
+  console.warn('[Safe Yatra Backend] Warning: Supabase URL is missing. Token verification may fail.');
+}
+
+const supabase = createClient(supabaseUrl, supabaseAnonKey || 'placeholder', {
+  auth: { persistSession: false }
+});
+
+export interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    email?: string;
+  };
+}
+
+export const requireAuth = async (req: AuthenticatedRequest, res: Response, next: express.NextFunction): Promise<void> => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'Missing or invalid Authorization header' });
+    return;
+  }
+
+  const token = authHeader.split(' ')[1];
+  
+  try {
+    const { data: { user }, error } = await supabase.auth.getUser(token);
+    
+    if (error || !user) {
+      res.status(401).json({ error: 'Invalid or expired token' });
+      return;
+    }
+    
+    req.user = { id: user.id, email: user.email };
+    next();
+  } catch (err) {
+    res.status(401).json({ error: 'Failed to verify token' });
+  }
+};
+
 // In-Memory Data Store (per AI Studio migration guidelines)
 interface AuditBlock {
   id: number;
@@ -417,30 +462,161 @@ app.get('/ready', (_req: Request, res: Response) => {
   });
 });
 
-// Profile / Current User
-app.get('/api/v1/me', (_req: Request, res: Response) => {
-  res.json(userProfile);
+// Auth Verification Test Route
+// We protect this route to test the token extraction and verification.
+// Other identity-sensitive routes (like /api/v1/me, /api/v1/sos) depend on a missing
+// profile schema to map the authenticated UUID to a tourist profile.
+// Per instructions, we do not protect them yet with mock roles.
+app.get('/api/v1/auth/test', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+  res.json({
+    message: 'Token verified successfully',
+    user_id: req.user?.id
+  });
 });
 
-app.patch('/api/v1/me', (req: Request, res: Response) => {
-  const { full_name, phone, blood_group, medical_conditions, emergency_contacts, role } = req.body;
-  if (full_name) userProfile.full_name = full_name;
-  if (phone) userProfile.phone = phone;
-  if (blood_group) userProfile.blood_group = blood_group;
-  if (medical_conditions) userProfile.medical_conditions = medical_conditions;
-  if (emergency_contacts) userProfile.emergency_contacts = emergency_contacts;
-  if (role) userProfile.role = role;
+// Profile / Current User
+app.get('/api/v1/me', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    // 1. Fetch trusted profile via RLS using the user's token.
+    // This safely avoids a service-role key for ordinary reads.
+    const token = req.headers.authorization?.split(' ')[1] || '';
+    const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth: { persistSession: false }
+    });
 
-  appendAuditEntry(
-    'PROFILE_UPDATED',
-    'profiles',
-    userProfile.id,
-    userProfile.role,
-    userProfile.id,
-    `Updated tourist profile for ${userProfile.full_name}`
-  );
+    const { data: profile, error } = await userSupabase
+      .from('profiles')
+      .select('*')
+      .eq('id', req.user!.id)
+      .single();
 
-  res.json(userProfile);
+    if (error) {
+      // PGRST116 indicates row not found in single() query
+      if (error.code !== 'PGRST116') {
+        console.error('[Safe Yatra Backend] Error querying profiles:', error.message);
+        return res.status(500).json({ error: 'Database error retrieving profile' });
+      }
+    }
+
+    if (!profile) {
+      console.warn(`[Safe Yatra Backend] No profile row found for user ${req.user!.id}. Returning uninitialized tourist profile.`);
+      // Gracefully return an uninitialized profile for the authenticated user without inventing verified claims
+      return res.json({
+        id: req.user!.id,
+        role: 'tourist' as const,
+        full_name: '',
+        email: req.user?.email || '',
+        phone: '',
+        public_id: 'UNREGISTERED',
+        blood_group: 'Unknown',
+        medical_conditions: [],
+        emergency_contacts: [],
+        identity_status: 'pending' as const,
+        active_trip_id: undefined,
+        quiet_hours_enabled: false,
+      });
+    }
+
+    // 2. Safely merge unmigrated legacy fields so dashboard types don't break.
+    // Legacy fields needing an explicit migration plan: blood_group, medical_conditions,
+    // emergency_contacts, active_trip_id, quiet_hours_enabled.
+    const fullProfile = {
+      ...profile,
+      phone: profile.phone || '',
+      email: req.user?.email || 'pending-migration@safeyatra.gov.in',
+      public_id: profile.id ? `TID-2026-${profile.id.slice(0, 4).toUpperCase()}` : 'TID-PENDING',
+      blood_group: 'Unknown',
+      medical_conditions: [],
+      emergency_contacts: [],
+      identity_status: 'pending' as const,
+      active_trip_id: undefined,
+      quiet_hours_enabled: false,
+    };
+
+    res.json(fullProfile);
+  } catch (err: any) {
+    console.error('[Safe Yatra Backend] Unexpected error in GET /api/v1/me:', err?.message || err);
+    res.status(500).json({ error: 'Failed to retrieve profile' });
+  }
+});
+
+app.patch('/api/v1/me', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      return res.status(400).json({ error: 'Request body must be a JSON object' });
+    }
+
+    // Never accept client-supplied id or role
+    if (req.body.id !== undefined || req.body.role !== undefined) {
+      return res.status(400).json({ error: 'Modifying id or role is not permitted' });
+    }
+
+    const { full_name, phone } = req.body;
+
+    const updates: { full_name?: string; phone?: string | null } = {};
+
+    if (full_name !== undefined) {
+      if (typeof full_name !== 'string') {
+        return res.status(400).json({ error: 'full_name must be a string' });
+      }
+      updates.full_name = full_name.trim();
+    }
+
+    if (phone !== undefined) {
+      if (typeof phone !== 'string' && phone !== null) {
+        return res.status(400).json({ error: 'phone must be a string or null' });
+      }
+      updates.phone = typeof phone === 'string' ? phone.trim() : null;
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: 'No valid update fields provided. Only full_name and phone can be updated.' });
+    }
+    
+    const token = req.headers.authorization?.split(' ')[1] || '';
+    const userSupabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+      auth: { persistSession: false }
+    });
+
+    const { data: profile, error } = await userSupabase
+      .from('profiles')
+      .update(updates)
+      .eq('id', req.user!.id)
+      .select()
+      .single();
+
+    if (error || !profile) {
+      console.error('[Safe Yatra Backend] Error updating profile:', error?.message);
+      return res.status(500).json({ error: 'Failed to update profile' });
+    }
+
+    appendAuditEntry(
+      'PROFILE_UPDATED',
+      'profiles',
+      profile.id,
+      profile.role,
+      profile.id,
+      `Updated tourist profile fields (${Object.keys(updates).join(', ')})`
+    );
+
+    res.json({
+      ...profile,
+      phone: profile.phone || '',
+      email: req.user?.email || 'pending-migration@safeyatra.gov.in',
+      public_id: profile.id ? `TID-2026-${profile.id.slice(0, 4).toUpperCase()}` : 'TID-PENDING',
+      blood_group: 'Unknown',
+      medical_conditions: [],
+      emergency_contacts: [],
+      identity_status: 'pending' as const,
+      active_trip_id: undefined,
+      quiet_hours_enabled: false,
+    });
+  } catch (err: any) {
+    console.error('[Safe Yatra Backend] Unexpected error in PATCH /api/v1/me:', err?.message || err);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
 });
 
 // Regenerate Tourist Public QR ID
